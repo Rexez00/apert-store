@@ -4,7 +4,7 @@ WORKDIR /app/apert-server
 COPY apert-server/package*.json ./
 RUN npm ci --no-audit --no-fund
 COPY apert-server/ ./
-RUN npx tsc
+RUN npx tsc && npx vite build
 
 FROM node:22-slim
 ENV NODE_ENV=production
