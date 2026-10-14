@@ -15,12 +15,14 @@
     "@as-integrations/express5": "^1.1.2",
     "@vendure/asset-server-plugin": "^3.7.1",
     "@vendure/core": "^3.7.1",
+    "@vendure/dashboard": "^3.8.0",
     "@vendure/graphiql-plugin": "^3.7.1",
     "better-sqlite3": "^12.2.0",
     "dotenv": "^16.4.5",
     "express": "^5.1.0",
     "pg": "^8.23.1",
-    "typeorm": "^0.3.21"
+    "typeorm": "^0.3.21",
+    "vite": "^8.3.4"
   },
   "devDependencies": {
     "typescript": "5.8.2"
@@ -29,6 +31,8 @@
     "better-sqlite3@12.11.1": true,
     "bcrypt@6.0.0": true,
     "re2@1.23.3": true,
-    "@apollo/protobufjs@1.2.8": true
+    "@apollo/protobufjs@1.2.8": true,
+    "esbuild@0.25.12": true,
+    "esbuild@0.28.2": true
   }
 }
