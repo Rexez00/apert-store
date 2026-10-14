@@ -79,7 +79,7 @@ async function load(){
   try{
     const d=await api(`{ activeOrder { id state totalWithTax lines { id quantity linePriceWithTax productVariant { id name } } } product(slug:"apert-fisheye-170") { featuredAsset { preview } } }`);
     order=d.activeOrder;
-    if(d.product&&d.product.featuredAsset)thumb=d.product.featuredAsset.preview;
+    if(d.product&&d.product.featuredAsset)thumb=d.product.featuredAsset.preview.replace(/^https?:\/\/localhost:\d+/,'');
     render();
   }catch(e){fail('Store offline — please start the APERT server and reload.');console.error(e);}
 }

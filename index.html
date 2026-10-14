@@ -197,7 +197,8 @@ async function init(){
     document.getElementById('stockLabel').textContent=n>0?'In stock':'Out of stock';
     const first=d.product.featuredAsset?[d.product.featuredAsset.preview]:[];
     const rest=(d.product.assets||[]).map(a=>a.preview).filter(u=>!first.includes(u));
-    buildSlides([...first,...rest]);
+    const fix=u=>u.replace(/^https?:\/\/localhost:\d+/,'');
+    buildSlides([...first,...rest].map(fix));
     await refreshOrder();
   }catch(e){console.error(e);toast('Store offline — start the APERT server.');}
 }
