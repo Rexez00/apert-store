@@ -1,6 +1,7 @@
 // Seeds the APERT store: channel settings, tax, free shipping,
 // demo payment, product + variant + assets. Safe to re-run (query-first).
 const API = process.env.VENDURE_API || 'http://localhost:3002/admin-api';
+const SHOP = API.replace('/admin-api', '/shop-api');
 const USER = process.env.SUPERADMIN_USERNAME || 'superadmin';
 const PASS = process.env.SUPERADMIN_PASSWORD || 'superadmin';
 
@@ -180,9 +181,29 @@ async function main() {
     let product = products.items.find(p => p.slug === 'apert-fisheye-170');
     let assetIds;
     if (product) {
-        log('product already exists — keeping existing assets');
+        // On ephemeral hosts (free tiers) uploaded files can vanish on redeploy
+        // while DB rows survive — re-upload + relink if any image 404s.
+        try {
+            const pv = await gql(`{ product(id: "${product.id}") { assets { id preview } } }`);
+            const urls = (pv.product?.assets || []).map(a => a.preview);
+            let missing = false;
+            for (const u of urls) {
+                try {
+                    const abs = u.startsWith('http') ? u : SHOP.replace('/shop-api', '') + u;
+                    const r = await fetch(abs, { method: 'HEAD' });
+                    if (!r.ok) { missing = true; break; }
+                } catch { missing = true; break; }
+            }
+            if (missing) {
+                log('assets missing on disk — re-uploading');
+                product._relink = true;
+            } else {
+                log('product already exists with healthy assets');
+            }
+        } catch { log('asset check skipped'); }
         assetIds = [];
-    } else {
+    }
+    if (!product || product._relink) {
         const form = new FormData();
         const ops = { query: `mutation CA($input: [CreateAssetInput!]!) { createAssets(input: $input) { __typename ... on Asset { id preview } ... on ErrorResult { errorCode message } } }`, variables: { input: files.map(() => ({})) } };
         form.append('operations', JSON.stringify(ops));
@@ -239,6 +260,14 @@ async function main() {
         }
     } else {
         log('product already exists:', product.slug);
+        if (product._relink && assetIds.length) {
+            const up = await gql(
+                `mutation UP($i: UpdateProductInput!) { updateProduct(input: $i) { id slug } }`,
+                { i: { id: product.id, assetIds, featuredAssetId: assetIds[0] } },
+            );
+            if (!up.updateProduct || !up.updateProduct.id) throw new Error('relink failed: ' + JSON.stringify(up.updateProduct));
+            log('relinked product images');
+        }
         const pv = await gql(`{ product(id: "${product.id}") { variantList { items { id } } } }`);
         variants = pv.product?.variantList?.items || [];
     }
@@ -266,7 +295,7 @@ async function main() {
 
     // 12. verify via shop api
     const shop = await (async () => {
-        const res = await fetch('http://localhost:3002/shop-api', {
+        const res = await fetch(SHOP, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ query: `{ product(slug: "apert-fisheye-170") { id slug variantList { items { id sku price priceWithTax stockLevel } } } }` }),
