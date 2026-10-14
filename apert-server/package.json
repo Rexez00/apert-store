@@ -1,0 +1,34 @@
+{
+  "name": "apert-server",
+  "version": "0.1.0",
+  "private": true,
+  "description": "APERT store backend — Vendure (SQLite, single product)",
+  "scripts": {
+    "build": "tsc",
+    "start:server": "node dist/index.js",
+    "start:worker": "node dist/index-worker.js",
+    "dev:server": "node --watch dist/index.js",
+    "seed": "node scripts/seed.mjs",
+    "test:order": "node scripts/test-order.mjs"
+  },
+  "dependencies": {
+    "@as-integrations/express5": "^1.1.2",
+    "@vendure/asset-server-plugin": "^3.7.1",
+    "@vendure/core": "^3.7.1",
+    "@vendure/graphiql-plugin": "^3.7.1",
+    "better-sqlite3": "^12.2.0",
+    "dotenv": "^16.4.5",
+    "express": "^5.1.0",
+    "pg": "^8.23.1",
+    "typeorm": "^0.3.21"
+  },
+  "devDependencies": {
+    "typescript": "5.8.2"
+  },
+  "allowScripts": {
+    "better-sqlite3@12.11.1": true,
+    "bcrypt@6.0.0": true,
+    "re2@1.23.3": true,
+    "@apollo/protobufjs@1.2.8": true
+  }
+}

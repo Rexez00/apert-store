@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Payment — APERT</title>
+<link rel="icon" href="Remove_background_and_format_text_2K_20261013224413.jpg">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#0a0a0a;--muted:#737373;--line:#e8e6e1;--bg:#fafaf9}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Inter',sans-serif;color:var(--ink);background:#fff}
+header{border-bottom:1px solid var(--line)}
+.nav{max-width:1000px;margin:0 auto;padding:16px 24px;display:flex;justify-content:space-between;align-items:center}
+.brand{display:flex;align-items:center;gap:10px;font-family:'Space Grotesk';letter-spacing:.22em;font-size:15px}
+.logo{height:26px;display:flex;align-items:center}.logo img{height:26px;width:108px;object-fit:cover;object-position:50% 46%}
+.wrap{max-width:1000px;margin:0 auto;padding:40px 24px 80px;display:grid;grid-template-columns:1.1fr .9fr;gap:48px}
+h1{font-family:'Space Grotesk';font-weight:500;font-size:28px;margin-bottom:6px}
+.sub{color:var(--muted);font-size:14px;margin-bottom:24px}
+label{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);display:block;margin:16px 0 6px;font-weight:600}
+input,select{width:100%;border:1px solid var(--line);border-radius:12px;padding:13px 14px;font-size:14px;font-family:inherit}
+input:focus{outline:0;border-color:#000}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.summary{background:var(--bg);border:1px solid var(--line);border-radius:16px;padding:24px;height:fit-content;position:sticky;top:80px}
+.item{display:flex;gap:12px;align-items:center;margin-bottom:14px}
+.item img{width:56px;height:56px;border-radius:12px;object-fit:cover;background:#eee}
+.row{display:flex;justify-content:space-between;font-size:14px;margin-top:8px}
+.total{font-size:17px;font-weight:600;border-top:1px solid var(--line);padding-top:12px;margin-top:12px}
+.pay{width:100%;background:#000;color:#fff;border:0;border-radius:100px;padding:16px;font-size:15px;font-weight:600;margin-top:20px;cursor:pointer}
+.back{display:block;text-align:center;margin-top:12px;font-size:13px;color:var(--muted)}
+.ok{text-align:center;padding:40px 0;display:none}
+.ok .big{font-size:52px}
+@media(max-width:800px){.wrap{grid-template-columns:1fr}.summary{position:static}}
+</style>
+</head>
+<body>
+<header><div class="nav"><a href="index.html" class="brand"><div class="logo"><img src="Remove_background_and_format_text_2K_20261013224413.jpg" alt="APERT"></div></a><span style="font-size:13px;color:#737373">Secure payment 🔒</span></div></header>
+<div class="wrap">
+<div>
+<div id="form">
+<h1>Payment.</h1>
+<p class="sub">One product · Demo checkout, no real charge.</p>
+<label>Contact</label><input id="email" placeholder="Email address">
+<label>Address</label><input id="fName" placeholder="Full name" style="margin-bottom:10px"><input id="fAddr" placeholder="Street address" style="margin-bottom:10px"><div class="two"><input id="fCity" placeholder="City"><input id="fZip" placeholder="ZIP"></div>
+<select id="fCountry" style="margin-top:10px"><option value="US">United States</option><option value="GB">United Kingdom</option><option value="CA">Canada</option><option value="AU">Australia</option><option value="DE">Germany</option><option value="FR">France</option></select>
+<label>Card</label><input id="cc" placeholder="4242 4242 4242 4242" maxlength="19" style="margin-bottom:10px"><div class="two"><input placeholder="MM / YY"><input placeholder="CVC"></div>
+<div id="err" style="display:none;background:#fff1f1;border:1px solid #f3c2c2;color:#a33;border-radius:12px;padding:12px;font-size:13px;margin-top:12px"></div>
+<button class="pay" id="btn" onclick="pay()">Pay <span id="amt">$0.00</span></button>
+<a class="back" href="index.html">← Back to product</a>
+</div>
+<div class="ok" id="ok"><div class="big">○</div><h1 style="margin-top:12px">Thank you.</h1><p class="sub" id="msg">Order confirmed.</p><a href="index.html" style="font-size:14px;text-decoration:underline">Back to APERT</a></div>
+</div>
+<div class="summary">
+<div id="list"></div>
+<div class="row"><span>Subtotal</span><span id="sub">$0.00</span></div>
+<div class="row total"><span>Total</span><span id="tot">$0.00</span></div>
+<p style="font-size:12px;color:#737373;margin-top:12px">VISA · Mastercard · Amex · PayPal · Apple Pay</p>
+</div>
+</div>
+<script>
+const SHOP_API=(location.origin.startsWith('http')?location.origin:'http://localhost:3002')+'/shop-api';
+const TOKEN_KEY='apert_token';
+let authToken=localStorage.getItem(TOKEN_KEY)||null;
+let order=null, thumb='Product pics/Fisheye_lens_product_photography_20261003174321.jpg';
+const money=c=>'$'+(c/100).toFixed(2);
+async function api(query,variables={}){
+  const headers={'Content-Type':'application/json'};
+  if(authToken)headers['Authorization']='Bearer '+authToken;
+  const res=await fetch(SHOP_API,{method:'POST',headers,body:JSON.stringify({query,variables})});
+  const tok=res.headers.get('vendure-auth-token');
+  if(tok){authToken=tok;localStorage.setItem(TOKEN_KEY,tok);}
+  const json=await res.json();
+  if(json.errors)throw new Error(json.errors.map(e=>e.message).join('; '));
+  return json.data;
+}
+function needOrder(v,op){if(!v||v.__typename!=='Order')throw new Error(op+': '+((v&&(v.errorCode+' '+(v.message||v.transitionError||'')))||'unexpected response'));return v;}
+function fail(msg){const e=document.getElementById('err');e.style.display='block';e.textContent=msg;document.getElementById('btn').textContent='Pay '+document.getElementById('amt').textContent;}
+async function load(){
+  try{
+    const d=await api(`{ activeOrder { id state totalWithTax lines { id quantity linePriceWithTax productVariant { id name } } } product(slug:"apert-fisheye-170") { featuredAsset { preview } } }`);
+    order=d.activeOrder;
+    if(d.product&&d.product.featuredAsset)thumb=d.product.featuredAsset.preview;
+    render();
+  }catch(e){fail('Store offline — please start the APERT server and reload.');console.error(e);}
+}
+function render(){
+  const box=document.getElementById('list');
+  if(!order||!order.lines.length){
+    box.innerHTML='<p style="color:#737373;font-size:14px">Your bag is empty. <a href="index.html" style="text-decoration:underline">Back to product</a></p>';
+    document.getElementById('sub').textContent='$0.00';
+    document.getElementById('tot').textContent='$0.00';
+    document.getElementById('amt').textContent='$0.00';
+    return;
+  }
+  box.innerHTML=order.lines.map(l=>`<div class="item"><img src="${thumb}"><div style="flex:1"><b style="font-size:13.5px">${l.productVariant.name}</b><br><small style="color:#737373">Qty ${l.quantity}</small></div><b style="font-size:14px">${money(l.linePriceWithTax)}</b></div>`).join('');
+  document.getElementById('sub').textContent=money(order.totalWithTax);
+  document.getElementById('tot').textContent=money(order.totalWithTax);
+  document.getElementById('amt').textContent=money(order.totalWithTax);
+}
+async function pay(){
+  const btn=document.getElementById('btn');
+  document.getElementById('err').style.display='none';
+  try{
+    if(!order||!order.lines.length)throw new Error('Your bag is empty.');
+    const email=document.getElementById('email').value.trim();
+    if(!email||!email.includes('@'))throw new Error('Enter a valid email address.');
+    const parts=document.getElementById('fName').value.trim().split(/\s+/);
+    const firstName=parts[0]||'Guest', lastName=parts.slice(1).join(' ')||'Customer';
+    if(!document.getElementById('fAddr').value.trim()||!document.getElementById('fCity').value.trim()||!document.getElementById('fZip').value.trim())throw new Error('Please complete the address.');
+    btn.textContent='Processing…';
+    let o=needOrder((await api(`mutation C($i:CreateCustomerInput!){setCustomerForOrder(input:$i){__typename ...on Order{id} ...on ErrorResult{errorCode message}}}`,{i:{emailAddress:email,firstName,lastName}})).setCustomerForOrder,'details');
+    o=needOrder((await api(`mutation A($i:CreateAddressInput!){setOrderShippingAddress(input:$i){__typename ...on Order{id} ...on ErrorResult{errorCode message}}}`,{i:{fullName:document.getElementById('fName').value.trim(),streetLine1:document.getElementById('fAddr').value.trim(),city:document.getElementById('fCity').value.trim(),postalCode:document.getElementById('fZip').value.trim(),countryCode:document.getElementById('fCountry').value}})).setOrderShippingAddress,'address');
+    const m=await api(`{eligibleShippingMethods{id code}}`);
+    if(!m.eligibleShippingMethods.length)throw new Error('No delivery options available.');
+    o=needOrder((await api(`mutation S($id:[ID!]!){setOrderShippingMethod(shippingMethodId:$id){__typename ...on Order{id code state totalWithTax} ...on ErrorResult{errorCode message}}}`,{id:[m.eligibleShippingMethods[0].id]})).setOrderShippingMethod,'delivery');
+    o=needOrder((await api(`mutation T($s:String!){transitionOrderToState(state:$s){__typename ...on Order{id code state totalWithTax} ...on OrderStateTransitionError{errorCode message transitionError}}}` ,{s:'ArrangingPayment'})).transitionOrderToState,'delivery');
+    const pms=await api(`{eligiblePaymentMethods{id code}}`);
+    const pm=pms.eligiblePaymentMethods.find(m=>m.code==='apert-demo-card')||pms.eligiblePaymentMethods[0];
+    if(!pm)throw new Error('No payment options available.');
+    o=needOrder((await api(`mutation P($i:PaymentInput!){addPaymentToOrder(input:$i){__typename ...on Order{id code state totalWithTax} ...on ErrorResult{errorCode message}}}`,{i:{method:pm.code,metadata:{}}})).addPaymentToOrder,'payment');
+    if(o.state==='PaymentAuthorized'){
+      o=needOrder((await api(`mutation T($s:String!){transitionOrderToState(state:$s){__typename ...on Order{id code state totalWithTax} ...on OrderStateTransitionError{errorCode message transitionError}}}`,{s:'PaymentSettled'})).transitionOrderToState,'confirm');
+    }
+    document.getElementById('form').style.display='none';
+    document.getElementById('ok').style.display='block';
+    document.getElementById('msg').textContent='Order '+o.code+' confirmed ('+money(o.totalWithTax)+'). Receipt sent to '+email+'.';
+  }catch(e){console.error(e);fail(e.message||'Payment failed.');}
+}
+load();
+</script>
+</body>
+</html>

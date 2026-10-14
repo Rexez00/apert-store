@@ -1,0 +1,20 @@
+# Render blueprint for the APERT store (free tier).
+# In the Render dashboard: New > Blueprint > connect the repo containing this file.
+services:
+  - type: web
+    name: apert
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        sync: false # paste the Neon Postgres connection string
+      - key: PUBLIC_URL
+        sync: false # e.g. https://apert.onrender.com (set after first deploy, then redeploy)
+      - key: COOKIE_SECRET
+        generateValue: true
+      - key: SUPERADMIN_USERNAME
+        sync: false
+      - key: SUPERADMIN_PASSWORD
+        sync: false
