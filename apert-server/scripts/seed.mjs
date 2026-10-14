@@ -164,7 +164,36 @@ async function main() {
         log('payment method exists');
     }
 
-    // 10. upload assets (lens, mirror, bed, game room)
+    // 9b. PayPal Checkout (only when sandbox/live creds provided via env)
+    if (process.env.PAYPAL_CLIENT_ID && process.env.PAYPAL_CLIENT_SECRET) {
+        let { paymentMethods: pms2 } = await gql(`{ paymentMethods { items { id code } } }`);
+        if (!pms2.items.some(p => p.code === 'apert-paypal')) {
+            const r = await gql(
+                `mutation PM($i: CreatePaymentMethodInput!) { createPaymentMethod(input: $i) { id code } }`,
+                {
+                    i: {
+                        code: 'apert-paypal',
+                        enabled: true,
+                        handler: {
+                            code: 'paypal-checkout',
+                            arguments: [
+                                { name: 'clientId', value: process.env.PAYPAL_CLIENT_ID },
+                                { name: 'clientSecret', value: process.env.PAYPAL_CLIENT_SECRET },
+                                { name: 'sandbox', value: process.env.PAYPAL_SANDBOX || 'true' },
+                            ],
+                        },
+                        translations: [{ languageCode: 'en', name: 'PayPal', description: '' }],
+                    },
+                },
+            );
+            if (!r.createPaymentMethod || !r.createPaymentMethod.id) throw new Error('createPaymentMethod(paypal) failed: ' + JSON.stringify(r.createPaymentMethod));
+            log('created payment method apert-paypal');
+        } else {
+            log('paypal payment method exists');
+        }
+    } else {
+        log('PAYPAL_* keys absent — skipping PayPal payment method');
+    }
     const path = await import('path');
     const fs = await import('fs');
     const storeDir = path.resolve(process.argv[2] || path.join(import.meta.dirname, '..', '..'));

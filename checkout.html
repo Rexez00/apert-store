@@ -43,7 +43,9 @@ input:focus{outline:0;border-color:#000}
 <label>Contact</label><input id="email" placeholder="Email address">
 <label>Address</label><input id="fName" placeholder="Full name" style="margin-bottom:10px"><input id="fAddr" placeholder="Street address" style="margin-bottom:10px"><div class="two"><input id="fCity" placeholder="City"><input id="fZip" placeholder="ZIP"></div>
 <select id="fCountry" style="margin-top:10px"><option value="US">United States</option><option value="GB">United Kingdom</option><option value="CA">Canada</option><option value="AU">Australia</option><option value="DE">Germany</option><option value="FR">France</option></select>
-<label>Card</label><input id="cc" placeholder="4242 4242 4242 4242" maxlength="19" style="margin-bottom:10px"><div class="two"><input placeholder="MM / YY"><input placeholder="CVC"></div>
+<label>Payment</label>
+<div id="pp-wrap" style="display:none"><div id="pp-buttons"></div></div>
+<div id="demo-pay"><input id="cc" placeholder="4242 4242 4242 4242" maxlength="19" style="margin-bottom:10px"><div class="two"><input placeholder="MM / YY"><input placeholder="CVC"></div></div>
 <div id="err" style="display:none;background:#fff1f1;border:1px solid #f3c2c2;color:#a33;border-radius:12px;padding:12px;font-size:13px;margin-top:12px"></div>
 <button class="pay" id="btn" onclick="pay()">Pay <span id="amt">$0.00</span></button>
 <a class="back" href="index.html">← Back to product</a>
@@ -97,36 +99,75 @@ function render(){
   document.getElementById('tot').textContent=money(order.totalWithTax);
   document.getElementById('amt').textContent=money(order.totalWithTax);
 }
+const PAYPAL_CLIENT_ID='';
+async function collectDetails(){
+  if(!order||!order.lines.length)throw new Error('Your bag is empty.');
+  const email=document.getElementById('email').value.trim();
+  if(!email||!email.includes('@'))throw new Error('Enter a valid email address.');
+  const parts=document.getElementById('fName').value.trim().split(/\s+/);
+  const firstName=parts[0]||'Guest', lastName=parts.slice(1).join(' ')||'Customer';
+  if(!document.getElementById('fAddr').value.trim()||!document.getElementById('fCity').value.trim()||!document.getElementById('fZip').value.trim())throw new Error('Please complete the address.');
+  let o=needOrder((await api(`mutation C($i:CreateCustomerInput!){setCustomerForOrder(input:$i){__typename ...on Order{id} ...on ErrorResult{errorCode message}}}`,{i:{emailAddress:email,firstName,lastName}})).setCustomerForOrder,'details');
+  o=needOrder((await api(`mutation A($i:CreateAddressInput!){setOrderShippingAddress(input:$i){__typename ...on Order{id} ...on ErrorResult{errorCode message}}}`,{i:{fullName:document.getElementById('fName').value.trim(),streetLine1:document.getElementById('fAddr').value.trim(),city:document.getElementById('fCity').value.trim(),postalCode:document.getElementById('fZip').value.trim(),countryCode:document.getElementById('fCountry').value}})).setOrderShippingAddress,'address');
+  const m=await api(`{eligibleShippingMethods{id code}}`);
+  if(!m.eligibleShippingMethods.length)throw new Error('No delivery options available.');
+  o=needOrder((await api(`mutation S($id:[ID!]!){setOrderShippingMethod(shippingMethodId:$id){__typename ...on Order{id code state totalWithTax} ...on ErrorResult{errorCode message}}}`,{id:[m.eligibleShippingMethods[0].id]})).setOrderShippingMethod,'delivery');
+  o=needOrder((await api(`mutation T($s:String!){transitionOrderToState(state:$s){__typename ...on Order{id code state totalWithTax} ...on OrderStateTransitionError{errorCode message transitionError}}}` ,{s:'ArrangingPayment'})).transitionOrderToState,'delivery');
+  return email;
+}
+function showConfirmation(code,total,email){
+  document.getElementById('form').style.display='none';
+  document.getElementById('ok').style.display='block';
+  document.getElementById('msg').textContent='Order '+code+' confirmed ('+money(total)+'). Receipt sent to '+email+'.';
+}
+function initPaypal(){
+  if(!PAYPAL_CLIENT_ID)return;
+  document.getElementById('pp-wrap').style.display='block';
+  document.getElementById('demo-pay').style.display='none';
+  const s=document.createElement('script');
+  s.src='https://www.paypal.com/sdk/js?client-id='+PAYPAL_CLIENT_ID+'&currency=USD&intent=capture';
+  s.onload=renderPaypalButtons;
+  s.onerror=()=>fail('Could not load PayPal — check connection and reload.');
+  document.head.appendChild(s);
+}
+function renderPaypalButtons(){
+  paypal.Buttons({
+    style:{layout:'vertical',color:'black',shape:'pill',label:'paypal'},
+    onClick:async(data,actions)=>{
+      document.getElementById('err').style.display='none';
+      try{await collectDetails();}catch(e){fail(e.message||'Check your details.');return actions.reject();}
+    },
+    createOrder:async()=>{
+      const d=await api(`mutation{createPaypalOrder}`);
+      return d.createPaypalOrder;
+    },
+    onApprove:async(data)=>{
+      try{
+        const email=document.getElementById('email').value.trim();
+        const o=needOrder((await api(`mutation($id:String!){capturePaypalOrder(paypalOrderId:$id){__typename ...on Order{id code state totalWithTax}}}`,{id:data.orderID})).capturePaypalOrder,'paypal');
+        showConfirmation(o.code,o.totalWithTax,email);
+      }catch(e){console.error(e);fail(e.message||'PayPal payment failed.');}
+    },
+    onError:(e)=>{console.error(e);fail('PayPal error — please try again.');}
+  }).render('#pp-buttons');
+}
 async function pay(){
   const btn=document.getElementById('btn');
   document.getElementById('err').style.display='none';
   try{
-    if(!order||!order.lines.length)throw new Error('Your bag is empty.');
-    const email=document.getElementById('email').value.trim();
-    if(!email||!email.includes('@'))throw new Error('Enter a valid email address.');
-    const parts=document.getElementById('fName').value.trim().split(/\s+/);
-    const firstName=parts[0]||'Guest', lastName=parts.slice(1).join(' ')||'Customer';
-    if(!document.getElementById('fAddr').value.trim()||!document.getElementById('fCity').value.trim()||!document.getElementById('fZip').value.trim())throw new Error('Please complete the address.');
+    const email=await collectDetails();
     btn.textContent='Processing…';
-    let o=needOrder((await api(`mutation C($i:CreateCustomerInput!){setCustomerForOrder(input:$i){__typename ...on Order{id} ...on ErrorResult{errorCode message}}}`,{i:{emailAddress:email,firstName,lastName}})).setCustomerForOrder,'details');
-    o=needOrder((await api(`mutation A($i:CreateAddressInput!){setOrderShippingAddress(input:$i){__typename ...on Order{id} ...on ErrorResult{errorCode message}}}`,{i:{fullName:document.getElementById('fName').value.trim(),streetLine1:document.getElementById('fAddr').value.trim(),city:document.getElementById('fCity').value.trim(),postalCode:document.getElementById('fZip').value.trim(),countryCode:document.getElementById('fCountry').value}})).setOrderShippingAddress,'address');
-    const m=await api(`{eligibleShippingMethods{id code}}`);
-    if(!m.eligibleShippingMethods.length)throw new Error('No delivery options available.');
-    o=needOrder((await api(`mutation S($id:[ID!]!){setOrderShippingMethod(shippingMethodId:$id){__typename ...on Order{id code state totalWithTax} ...on ErrorResult{errorCode message}}}`,{id:[m.eligibleShippingMethods[0].id]})).setOrderShippingMethod,'delivery');
-    o=needOrder((await api(`mutation T($s:String!){transitionOrderToState(state:$s){__typename ...on Order{id code state totalWithTax} ...on OrderStateTransitionError{errorCode message transitionError}}}` ,{s:'ArrangingPayment'})).transitionOrderToState,'delivery');
     const pms=await api(`{eligiblePaymentMethods{id code}}`);
     const pm=pms.eligiblePaymentMethods.find(m=>m.code==='apert-demo-card')||pms.eligiblePaymentMethods[0];
     if(!pm)throw new Error('No payment options available.');
-    o=needOrder((await api(`mutation P($i:PaymentInput!){addPaymentToOrder(input:$i){__typename ...on Order{id code state totalWithTax} ...on ErrorResult{errorCode message}}}`,{i:{method:pm.code,metadata:{}}})).addPaymentToOrder,'payment');
+    let o=needOrder((await api(`mutation P($i:PaymentInput!){addPaymentToOrder(input:$i){__typename ...on Order{id code state totalWithTax} ...on ErrorResult{errorCode message}}}`,{i:{method:pm.code,metadata:{}}})).addPaymentToOrder,'payment');
     if(o.state==='PaymentAuthorized'){
       o=needOrder((await api(`mutation T($s:String!){transitionOrderToState(state:$s){__typename ...on Order{id code state totalWithTax} ...on OrderStateTransitionError{errorCode message transitionError}}}`,{s:'PaymentSettled'})).transitionOrderToState,'confirm');
     }
-    document.getElementById('form').style.display='none';
-    document.getElementById('ok').style.display='block';
-    document.getElementById('msg').textContent='Order '+o.code+' confirmed ('+money(o.totalWithTax)+'). Receipt sent to '+email+'.';
+    showConfirmation(o.code,o.totalWithTax,email);
   }catch(e){console.error(e);fail(e.message||'Payment failed.');}
 }
-load();
+load();initPaypal();
 </script>
 </body>
 </html>

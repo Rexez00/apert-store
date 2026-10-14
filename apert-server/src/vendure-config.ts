@@ -9,6 +9,7 @@ import {
 import { AssetServerPlugin } from '@vendure/asset-server-plugin';
 import { DashboardPlugin } from '@vendure/dashboard/plugin';
 import { GraphiqlPlugin } from '@vendure/graphiql-plugin';
+import { PaypalPlugin } from './plugins/paypal/paypal.plugin';
 import 'dotenv/config';
 import path from 'path';
 
@@ -65,6 +66,7 @@ export const config: VendureConfig = {
     },
     plugins: [
         GraphiqlPlugin.init(),
+        PaypalPlugin,
         DashboardPlugin.init({
             route: 'dashboard',
             appDir: path.join(__dirname, '../dist/dashboard'),
