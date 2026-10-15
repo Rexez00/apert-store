@@ -99,7 +99,7 @@ function render(){
   document.getElementById('tot').textContent=money(order.totalWithTax);
   document.getElementById('amt').textContent=money(order.totalWithTax);
 }
-const PAYPAL_CLIENT_ID='';
+const PAYPAL_CLIENT_ID='ARjhTWjcQPsbXRAJDR-GVuw8uwU4PN5y93IfuSbpF5CO4LO7gy9qdX_1TYcxfFPSkPmT8p7AXE0auxJG';
 async function collectDetails(){
   if(!order||!order.lines.length)throw new Error('Your bag is empty.');
   const email=document.getElementById('email').value.trim();

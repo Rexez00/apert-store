@@ -4,6 +4,7 @@ import {
     ActiveOrderService,
     Allow,
     Ctx,
+    EntityHydrator,
     Order,
     OrderService,
     Permission,
@@ -26,7 +27,20 @@ export class PaypalShopResolver {
         private paypalService: PaypalService,
         private activeOrderService: ActiveOrderService,
         private orderService: OrderService,
+        private entityHydrator: EntityHydrator,
     ) {}
+
+    private async getActiveOrderOrFail(ctx: RequestContext): Promise<Order> {
+        const order = await this.activeOrderService.getActiveOrder(ctx, undefined);
+        if (!order) {
+            throw new UserInputError('Your bag is empty.');
+        }
+        await this.entityHydrator.hydrate(ctx, order, { relations: ['lines'] });
+        if (order.lines.length === 0) {
+            throw new UserInputError('Your bag is empty.');
+        }
+        return order;
+    }
 
     /**
      * Creates a PayPal order for the shopper's active order.
@@ -35,10 +49,7 @@ export class PaypalShopResolver {
     @Mutation()
     @Allow(Permission.Owner)
     async createPaypalOrder(@Ctx() ctx: RequestContext): Promise<string> {
-        const order = await this.activeOrderService.getActiveOrder(ctx, undefined);
-        if (!order || order.lines.length === 0) {
-            throw new UserInputError('Your bag is empty.');
-        }
+        const order = await this.getActiveOrderOrFail(ctx);
         return this.paypalService.createOrder(ctx, order.totalWithTax, order.currencyCode, order.code);
     }
 
@@ -49,10 +60,7 @@ export class PaypalShopResolver {
     @Mutation()
     @Allow(Permission.Owner)
     async capturePaypalOrder(@Ctx() ctx: RequestContext, @Args() args: { paypalOrderId: string }): Promise<Order> {
-        const order = await this.activeOrderService.getActiveOrder(ctx, undefined);
-        if (!order || order.lines.length === 0) {
-            throw new UserInputError('Your bag is empty.');
-        }
+        const order = await this.getActiveOrderOrFail(ctx);
         const capture = await this.paypalService.captureOrder(ctx, args.paypalOrderId);
         if (order.state !== 'ArrangingPayment' && order.state !== 'ArrangingAdditionalPayment') {
             asOrder(await this.orderService.transitionToState(ctx, order.id, 'ArrangingPayment'), 'prepare payment');
