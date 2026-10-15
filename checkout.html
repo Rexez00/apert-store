@@ -77,7 +77,7 @@ async function api(query,variables={}){
   return json.data;
 }
 function needOrder(v,op){if(!v||v.__typename!=='Order')throw new Error(op+': '+((v&&(v.errorCode+' '+(v.message||v.transitionError||'')))||'unexpected response'));return v;}
-function fail(msg){const e=document.getElementById('err');e.style.display='block';e.textContent=msg;document.getElementById('btn').textContent='Pay '+document.getElementById('amt').textContent;}
+function fail(msg){const e=document.getElementById('err');if(e){e.style.display='block';e.textContent=msg;}const b=document.getElementById('btn'),a=document.getElementById('amt');if(b)b.textContent='Pay '+(a?a.textContent:'');}
 async function load(){
   try{
     const d=await api(`{ activeOrder { id state totalWithTax lines { id quantity linePriceWithTax productVariant { id name } } } product(slug:"apert-fisheye-170") { featuredAsset { preview } } }`);
@@ -131,7 +131,7 @@ function initPaypal(){
   s.onerror=()=>fail('Could not load PayPal — check connection and reload.');
   document.head.appendChild(s);
 }
-function ppStatus(m){document.getElementById('pp-status').textContent=m;}
+function ppStatus(m){const s=document.getElementById('pp-status');if(s)s.textContent=m;}
 function renderPaypalButtons(){
   paypal.Buttons({
     style:{layout:'vertical',color:'black',shape:'pill',label:'paypal'},
