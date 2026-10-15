@@ -138,8 +138,11 @@ function renderPaypalButtons(){
       try{await collectDetails();}catch(e){fail(e.message||'Check your details.');return actions.reject();}
     },
     createOrder:async()=>{
-      const d=await api(`mutation{createPaypalOrder}`);
-      return d.createPaypalOrder;
+      try{
+        const d=await api(`mutation{createPaypalOrder}`);
+        if(!d.createPaypalOrder)throw new Error('Empty PayPal order — reload and try again.');
+        return d.createPaypalOrder;
+      }catch(e){throw new Error('Order setup failed: '+(e.message||'network error'));}
     },
     onApprove:async(data)=>{
       try{
@@ -148,7 +151,7 @@ function renderPaypalButtons(){
         showConfirmation(o.code,o.totalWithTax,email);
       }catch(e){console.error(e);fail(e.message||'PayPal payment failed.');}
     },
-    onError:(e)=>{console.error(e);fail('PayPal error — please try again.');}
+    onError:(e)=>{console.error(e);let m='PayPal error — please try again.';try{if(e&&e.message)m='PayPal: '+String(e.message).slice(0,160);}catch(_){}fail(m);}
   }).render('#pp-buttons');
 }
 async function pay(){
