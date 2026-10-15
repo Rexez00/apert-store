@@ -30,6 +30,7 @@ input:focus{outline:0;border-color:#000}
 .back{display:block;text-align:center;margin-top:12px;font-size:13px;color:var(--muted)}
 .ok{text-align:center;padding:40px 0;display:none}
 .ok .big{font-size:52px}
+#pp-card #card-name,#pp-card #card-number,#pp-card #card-expiry,#pp-card #card-cvv{border:1px solid var(--line);border-radius:12px;padding:13px 14px;background:#fff;min-height:46px}
 @media(max-width:800px){.wrap{grid-template-columns:1fr}.summary{position:static}}
 </style>
 </head>
@@ -44,7 +45,7 @@ input:focus{outline:0;border-color:#000}
 <label>Address</label><input id="fName" placeholder="Full name" style="margin-bottom:10px"><input id="fAddr" placeholder="Street address" style="margin-bottom:10px"><div class="two"><input id="fCity" placeholder="City"><input id="fZip" placeholder="ZIP"></div>
 <select id="fCountry" style="margin-top:10px"><option value="US">United States</option><option value="GB">United Kingdom</option><option value="CA">Canada</option><option value="AU">Australia</option><option value="DE">Germany</option><option value="FR">France</option></select>
 <label>Payment</label>
-<div id="pp-wrap" style="display:none"><div id="pp-buttons"></div></div>
+<div id="pp-wrap" style="display:none"><div id="pp-buttons"></div><div id="pp-card" style="display:none;margin-top:12px"><div id="card-name"></div><div id="card-number" style="margin-top:8px"></div><div class="two" style="margin-top:8px"><div id="card-expiry"></div><div id="card-cvv"></div></div><button class="pay" id="card-btn" style="margin-top:12px">Pay with card</button></div><div id="pp-status" style="font-size:12.5px;color:#737373;margin-top:8px"></div></div>
 <div id="demo-pay"><input id="cc" placeholder="4242 4242 4242 4242" maxlength="19" style="margin-bottom:10px"><div class="two"><input placeholder="MM / YY"><input placeholder="CVC"></div></div>
 <div id="err" style="display:none;background:#fff1f1;border:1px solid #f3c2c2;color:#a33;border-radius:12px;padding:12px;font-size:13px;margin-top:12px"></div>
 <button class="pay" id="btn" onclick="pay()">Pay <span id="amt">$0.00</span></button>
@@ -125,34 +126,76 @@ function initPaypal(){
   document.getElementById('pp-wrap').style.display='block';
   document.getElementById('demo-pay').style.display='none';
   const s=document.createElement('script');
-  s.src='https://www.paypal.com/sdk/js?client-id='+PAYPAL_CLIENT_ID+'&currency=USD&intent=capture';
+  s.src='https://www.paypal.com/sdk/js?client-id='+PAYPAL_CLIENT_ID+'&currency=USD&intent=capture&components=buttons,card-fields';
   s.onload=renderPaypalButtons;
   s.onerror=()=>fail('Could not load PayPal — check connection and reload.');
   document.head.appendChild(s);
 }
+function ppStatus(m){document.getElementById('pp-status').textContent=m;}
 function renderPaypalButtons(){
   paypal.Buttons({
     style:{layout:'vertical',color:'black',shape:'pill',label:'paypal'},
     onClick:async(data,actions)=>{
       document.getElementById('err').style.display='none';
-      try{await collectDetails();}catch(e){fail(e.message||'Check your details.');return actions.reject();}
+      try{ppStatus('Preparing your order…');await collectDetails();ppStatus('Opening PayPal…');}
+      catch(e){ppStatus('');fail(e.message||'Check your details.');return actions.reject();}
     },
     createOrder:async()=>{
       try{
+        ppStatus('Creating PayPal order…');
         const d=await api(`mutation{createPaypalOrder}`);
         if(!d.createPaypalOrder)throw new Error('Empty PayPal order — reload and try again.');
+        ppStatus('Waiting for approval in the PayPal window…');
         return d.createPaypalOrder;
-      }catch(e){throw new Error('Order setup failed: '+(e.message||'network error'));}
+      }catch(e){ppStatus('');throw new Error('Order setup failed: '+(e.message||'network error'));}
     },
     onApprove:async(data)=>{
       try{
+        ppStatus('Confirming payment…');
         const email=document.getElementById('email').value.trim();
         const o=needOrder((await api(`mutation($id:String!){capturePaypalOrder(paypalOrderId:$id){__typename ...on Order{id code state totalWithTax}}}`,{id:data.orderID})).capturePaypalOrder,'paypal');
+        ppStatus('');
         showConfirmation(o.code,o.totalWithTax,email);
-      }catch(e){console.error(e);fail(e.message||'PayPal payment failed.');}
+      }catch(e){console.error(e);ppStatus('');fail(e.message||'PayPal payment failed.');}
     },
-    onError:(e)=>{console.error(e);let m='PayPal error — please try again.';try{if(e&&e.message)m='PayPal: '+String(e.message).slice(0,160);}catch(_){}fail(m);}
+    onCancel:()=>{ppStatus('Payment cancelled — no charge made.');},
+    onError:(e)=>{console.error(e);let m='PayPal error — please try again.';try{if(e&&e.message)m='PayPal: '+String(e.message).slice(0,160);}catch(_){}ppStatus('');fail(m);}
   }).render('#pp-buttons');
+  try{
+    if(paypal.CardFields){
+      const cf=paypal.CardFields({
+        createOrder:async()=>{
+          ppStatus('Creating card order…');
+          const d=await api(`mutation{createPaypalOrder}`);
+          if(!d.createPaypalOrder)throw new Error('Empty order.');
+          return d.createPaypalOrder;
+        },
+        onApprove:async(data)=>{
+          try{
+            const email=document.getElementById('email').value.trim();
+            const o=needOrder((await api(`mutation($id:String!){capturePaypalOrder(paypalOrderId:$id){__typename ...on Order{id code state totalWithTax}}}`,{id:data.orderID})).capturePaypalOrder,'paypal');
+            showConfirmation(o.code,o.totalWithTax,email);
+          }catch(e){console.error(e);fail(e.message||'Card payment failed.');}
+        },
+        onError:(e)=>{console.error(e);fail('Card error: '+((e&&e.message)||'please try again.').toString().slice(0,160));},
+        style:{input:{'font-size':'14px','font-family':'Inter, sans-serif'}},
+      });
+      if(cf.isEligible()){
+        document.getElementById('pp-card').style.display='block';
+        cf.NameField().render('#card-name');
+        cf.NumberField().render('#card-number');
+        cf.ExpiryField().render('#card-expiry');
+        cf.CVVField().render('#card-cvv');
+        document.getElementById('card-btn').onclick=async()=>{
+          document.getElementById('err').style.display='none';
+          try{
+            ppStatus('Preparing your order…');await collectDetails();ppStatus('Processing card…');
+            await cf.submit();
+          }catch(e){console.error(e);ppStatus('');fail((e&&e.message||'Card payment failed.').toString().slice(0,180));}
+        };
+      }
+    }
+  }catch(e){console.error('cardfields:',e);}
 }
 async function pay(){
   const btn=document.getElementById('btn');
